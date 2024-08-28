@@ -1,0 +1,4 @@
+backups:
+  - volume: "vm-9999-pvc-2b64a330-899d-4581-b1b1-a66255120318"
+defaultPool: default
+defaultDestination: /mnt/pve/storage/rbd-backup
