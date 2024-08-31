@@ -35,14 +35,15 @@ cleanup () {
     set -e
 }
 
-for VOLUME in $(get_backup_volumes); do
+backup () {
+    local VOLUME="${1}"
     MESSAGE="Backing up ${VOLUME}"
     echo "${MESSAGE}"
     underline_message "${MESSAGE}"
 
     POOL=$(get_pool_for_volume "${VOLUME}")
     DESTINATION=$(get_destination_for_volume "${VOLUME}")
-    
+
     MOUNT_PATH="${TMP_MOUNT_DIR}/${VOLUME}"
     mkdir -p "${MOUNT_PATH}"
 
@@ -57,4 +58,46 @@ for VOLUME in $(get_backup_volumes); do
     trap - ERR SIGINT
     cleanup "${MOUNT_PATH}" "${RBD_DEVICE}"
     echo
-done
+}
+
+restore () {
+    local VOLUME="${1}"
+    MESSAGE="Restoring ${VOLUME}"
+    echo "${MESSAGE}"
+    underline_message "${MESSAGE}"
+
+    POOL=$(get_pool_for_volume "${VOLUME}")
+    DESTINATION=$(get_destination_for_volume "${VOLUME}")
+    
+    MOUNT_PATH="${TMP_MOUNT_DIR}/${VOLUME}"
+    mkdir -p "${MOUNT_PATH}"
+
+    # At this point whatever happens make sure to cleanup
+    trap "cleanup '${MOUNT_PATH}' '${RBD_DEVICE}'" ERR SIGINT
+
+    RBD_DEVICE=$(rbd device map --pool "${POOL}" "${VOLUME}")
+    mount "${RBD_DEVICE}" "${MOUNT_PATH}"
+    rsync -av --del --exclude "lost+found" "${DESTINATION}" "${MOUNT_PATH}"
+
+    # All is good in the world, reset the trap for ERR and SIGINT
+    trap - ERR SIGINT
+    cleanup "${MOUNT_PATH}" "${RBD_DEVICE}"
+    echo
+}
+
+COMMAND="$1"
+shift
+
+case "$COMMAND" in
+  "")
+    for VOLUME in $(get_backup_volumes); do
+        backup "${VOLUME}"   
+    done;;
+  restore)
+    for VOLUME in "${@}"; do
+        restore "$@"
+    done;;
+  *)
+    echo "Unrecognised command $COMMAND"
+    exit 1;;
+esac
